@@ -165,13 +165,30 @@ def visualize_grasps(pc, pred_grasps_cam, scores,
     if save_path is not None:
         os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
         render = o3d.visualization.rendering.OffscreenRenderer(1280, 720)
-        mat = o3d.visualization.rendering.MaterialRecord()
-        mat.shader = "defaultUnlit"
+        mat_pc = o3d.visualization.rendering.MaterialRecord()
+        mat_pc.shader = "defaultUnlit"
+        mat_line = o3d.visualization.rendering.MaterialRecord()
+        mat_line.shader = "unlitLine"
+        mat_line.line_width = 2.0
         for idx, geom in enumerate(geometries):
-            render.scene.add_geometry(f"geom_{idx}", geom, mat)
+            if isinstance(geom, o3d.geometry.LineSet):
+                render.scene.add_geometry(f"geom_{idx}", geom, mat_line)
+            else:
+                render.scene.add_geometry(f"geom_{idx}", geom, mat_pc)
         render.scene.set_background([1, 1, 1, 1])
+        bounds = render.scene.bounding_box
+        center = bounds.get_center()
+        extent = np.linalg.norm(bounds.get_max_bound() - bounds.get_min_bound())
+        eye    = center + np.array([0, 0, -extent])
+        up     = np.array([0, -1, 0])
+        render.setup_camera(60.0, center.astype(np.float32),
+                            eye.astype(np.float32),
+                            up.astype(np.float32))
         img = render.render_to_image()
-        o3d.io.write_image(save_path, img)
+        # Convert Open3D image to numpy and save with PIL (more reliable than o3d.io.write_image)
+        img_np = np.asarray(img)
+        from PIL import Image as PILImage
+        PILImage.fromarray(img_np).save(save_path)
         print(f"Saved render to {save_path}")
 
     # -- Interactive window --

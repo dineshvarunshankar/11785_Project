@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     libegl1-mesa-dev \
     libgles2-mesa-dev \
+    libosmesa6 \
     && rm -rf /var/lib/apt/lists/*
 
 # Make python3.10 the default python
@@ -41,10 +42,14 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 \
 # Default: GPU build (CUDA 12.1)
 # CPU build: docker build --build-arg PYTORCH_INDEX=https://download.pytorch.org/whl/cpu .
 # ─────────────────────────────────────────────────────────────────────────────
-ARG PYTORCH_INDEX=https://download.pytorch.org/whl/cu126
+# Default: cu124 (portable — covers sm_50 through sm_90: V100, A100, RTX 30xx/40xx)
+# Blackwell (sm_120, RTX 50xx): use make build-blackwell → passes cu128
+ARG PYTORCH_INDEX=https://download.pytorch.org/whl/cu124
+ARG TORCH_VERSION=2.5.1
+ARG TORCHVISION_VERSION=0.20.1
 RUN pip install --no-cache-dir \
-    torch==2.6.0 \
-    torchvision==0.21.0 \
+    torch==${TORCH_VERSION} \
+    torchvision==${TORCHVISION_VERSION} \
     --index-url ${PYTORCH_INDEX}
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -84,16 +89,24 @@ WORKDIR /workspace
 COPY . /workspace
 
 # Install contact_graspnet_pytorch and install (includes Pointnet_Pointnet2_pytorch/provider.py)
-# Patch checkpoints.py: PyTorch 2.6 changed torch.load default to weights_only=True,
-# but the saved checkpoint contains numpy objects — must use weights_only=False.
+# Patch 1 — checkpoints.py: PyTorch 2.6+ changed torch.load default to weights_only=True,
+#            but the checkpoint contains numpy objects; must use weights_only=False.
+# Patch 2 — inference.py: comment out Open3D visualization calls (show_image / visualize_grasps)
+#            which crash in headless Docker. Results are already saved to results/ before these lines.
 RUN git clone https://github.com/elchun/contact_graspnet_pytorch.git /opt/cgn \
     && sed -i 's/torch.load(filename)/torch.load(filename, weights_only=False)/g' \
        /opt/cgn/contact_graspnet_pytorch/checkpoints.py \
+    && sed -i 's/^\(\s*show_image(.*)\)$/# \1/' \
+       /opt/cgn/contact_graspnet_pytorch/inference.py \
+    && sed -i 's/^\(\s*visualize_grasps(.*)\)$/# \1/' \
+       /opt/cgn/contact_graspnet_pytorch/inference.py \
     && pip install --no-cache-dir -e /opt/cgn
 ENV PYTHONPATH="/opt/cgn/Pointnet_Pointnet2_pytorch:/opt/cgn/contact_graspnet_pytorch"
 
 # Use EGL for headless OpenGL rendering (required by pyrender inside Docker)
 ENV PYOPENGL_PLATFORM=egl
+# Use CPU/OSMesa software rendering for Open3D headless mode
+ENV OPEN3D_CPU_RENDERING=true
 
 # Default: drop into bash
 CMD ["/bin/bash"]

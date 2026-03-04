@@ -18,6 +18,9 @@ checkpoints/*.pth
 
 # Inference outputs
 results/
+
+# Host visualization venv
+cgn_visualize_venv/
 outputs/
 
 # Jupyter

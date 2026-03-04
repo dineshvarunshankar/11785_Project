@@ -26,12 +26,16 @@ def contact_to_grasp_pose(contact_pts, base_dirs, approach_dirs, widths):
     grasps = np.eye(4)[None].repeat(N, axis=0)  # Nx4x4 identity init
 
     # Normalize input directions
-    x = base_dirs    / (np.linalg.norm(base_dirs,     axis=1, keepdims=True) + 1e-8)
     z = approach_dirs / (np.linalg.norm(approach_dirs, axis=1, keepdims=True) + 1e-8)
 
-    # y-axis: cross(z, x) to form right-handed frame
-    y = np.cross(z, x)
+    # y-axis: cross(z, base) then normalize — perpendicular to both
+    x_raw = base_dirs / (np.linalg.norm(base_dirs, axis=1, keepdims=True) + 1e-8)
+    y = np.cross(z, x_raw)
     y = y / (np.linalg.norm(y, axis=1, keepdims=True) + 1e-8)
+
+    # Recompute x = cross(y, z) to guarantee orthonormality (Gram-Schmidt)
+    x = np.cross(y, z)
+    x = x / (np.linalg.norm(x, axis=1, keepdims=True) + 1e-8)
 
     # Rotation matrix columns: [x | y | z]
     grasps[:, :3, 0] = x
