@@ -58,8 +58,16 @@ You need:
 ## Step 1 — Clone the repo
 
 ```bash
-git clone <repo-url>
+git clone --recurse-submodules <repo-url>
 cd 11785_Project
+```
+
+The `--recurse-submodules` flag fetches the reference PyTorch port
+(`contact_graspnet_pytorch/`) which contains the pre-trained checkpoints
+and test data. If you forgot this flag:
+
+```bash
+git submodule update --init --recursive
 ```
 
 ---
@@ -158,11 +166,12 @@ Both should complete without errors.
 11785_Project/
 ├── Dockerfile              ← Everything needed to build the containerized environment
 ├── Makefile                ← All commands: build, inference, visualize, test
+├── contact_graspnet_pytorch/  ← Git submodule — the PyTorch port (checkpoints + test data)
 ├── configs/
 │   └── config.yaml         ← Model and training hyperparameters (edit freely)
 ├── checkpoints/
-│   └── contact_graspnet/   ← Pre-trained model weights
-├── test_data/              ← Example depth scenes (.npy files) for inference
+│   └── contact_graspnet/   ← Pre-trained model weights (symlink into submodule)
+├── test_data/              ← Symlink → contact_graspnet_pytorch/test_data/
 ├── results/                ← Inference outputs saved here (gitignored)
 ├── p1/
 │   ├── pose_utils.py       ← contact_to_grasp_pose(): network output → 4×4 SE(3) pose

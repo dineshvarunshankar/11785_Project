@@ -1,6 +1,5 @@
 # Reference repos — local only, never pushed
 contact_graspnet/
-contact_graspnet_pytorch/
 
 # Python
 __pycache__/
