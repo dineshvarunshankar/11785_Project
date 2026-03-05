@@ -38,16 +38,16 @@ def verify_forward_pass(PointNetSetAbstractionMsg, PointNetSetAbstraction,
         npoint=512,
         radius_list=[0.02, 0.04],
         nsample_list=[32, 64],
-        in_channel=3,
+        in_channel=0,          # 0 extra features (xyz only); layer adds +3 internally
         mlp_list=[[32, 32, 64], [64, 64, 128]],
     ).to(device)
 
-    # Batch of 2, 2048 points, xyz only
-    xyz   = torch.randn(2, 2048, 3).to(device)
+    # Layer expects [B, C, N] (channels first) — it permutes internally to [B, N, C]
+    xyz   = torch.randn(2, 3, 2048).to(device)   # B=2, C=3 (xyz), N=2048
     points = None
 
     new_xyz, new_points = sa(xyz, points)
-    assert new_xyz.shape == (2, 512, 3), f"Unexpected shape: {new_xyz.shape}"
+    assert new_xyz.shape == (2, 3, 512), f"Unexpected shape: {new_xyz.shape}"
     print(f"PASS  SA-MSG forward pass  input={list(xyz.shape)} → output={list(new_xyz.shape)}")
 
 

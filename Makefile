@@ -26,6 +26,9 @@ run:
 	docker run --rm -it \
 	--gpus all \
 	--user $(shell id -u):$(shell id -g) \
+	-e DISPLAY=$(DISPLAY) \
+	-e XDG_RUNTIME_DIR=/tmp \
+	-v /tmp/.X11-unix:/tmp/.X11-unix \
 	-v $(PWD):/workspace \
 	--name $(CONTAINER) \
 	$(IMAGE)
@@ -38,9 +41,13 @@ run-cpu:
 	$(IMAGE)-cpu
 
 inference:
+	xhost +local:docker 2>/dev/null || true
 	docker run --rm -it \
 	--gpus all \
 	--user $(shell id -u):$(shell id -g) \
+	-e DISPLAY=$(DISPLAY) \
+	-e XDG_RUNTIME_DIR=/tmp \
+	-v /tmp/.X11-unix:/tmp/.X11-unix \
 	-v $(PWD):/workspace \
 	$(IMAGE) python -m contact_graspnet_pytorch.inference \
 	--np_path="test_data/*.npy" \
@@ -57,15 +64,27 @@ verify:
 	docker run --rm -it \
 	--gpus all \
 	--user $(shell id -u):$(shell id -g) \
+	-e DISPLAY=$(DISPLAY) \
+	-e XDG_RUNTIME_DIR=/tmp \
+	-v /tmp/.X11-unix:/tmp/.X11-unix \
 	-v $(PWD):/workspace \
 	$(IMAGE) python p1/verify_pointnet2.py
 
-# Host-side visualization using Open3D interactive window (no Docker needed)
+# Visualization — runs inside Docker with X11 forwarding (opens interactive Open3D window)
+visualize:
+	xhost +local:docker 2>/dev/null || true
+	docker run --rm -it \
+	--gpus all \
+	--user $(shell id -u):$(shell id -g) \
+	-e DISPLAY=$(DISPLAY) \
+	-e XDG_RUNTIME_DIR=/tmp \
+	-v /tmp/.X11-unix:/tmp/.X11-unix \
+	-v $(PWD):/workspace \
+	$(IMAGE) python p1/visualize_predictions.py
+
+# (Optional) host-side visualization fallback if X11 is unavailable
 setup-venv:
 	bash setup_venv.sh
-
-visualize:
-	cgn_visualize_venv/bin/python p1/visualize_predictions.py
 
 down:
 	docker stop $(CONTAINER) 2>/dev/null || true
@@ -74,4 +93,4 @@ down:
 clean:
 	docker rmi $(IMAGE) $(IMAGE)-cpu 2>/dev/null || true
 
-.PHONY: build build-cpu run run-cpu inference test verify down clean
+.PHONY: build build-cpu run run-cpu inference test verify visualize setup-venv down clean

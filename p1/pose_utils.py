@@ -1,6 +1,5 @@
 """
 Converts CGN network outputs (4-DoF) into full SE(3) grasp poses (6-DoF).
-Math mirrors contact_graspnet/contact_graspnet/contact_graspnet.py::build_6d_grasp.
 """
 
 import numpy as np
@@ -52,7 +51,7 @@ def contact_to_grasp_pose(contact_pts, base_dirs, approach_dirs, widths):
     return grasps
 
 
-# ── Tests ─────────────────────────────────────────────────────────────────────
+# Tests
 
 def _test_output_shape(): # should produce Nx4x4 output
     N = 10
@@ -92,10 +91,7 @@ def _test_homogeneous_row(): # bottom row should be [0, 0, 0, 1]
 
 
 def _test_known_pose(): # sanity check with axis-aligned inputs
-    """
-    Sanity check with axis-aligned inputs whose result is hand-verifiable.
-    base=[1,0,0], approach=[0,0,1] -> R=I, t = contact + width/2*x - depth*z
-    """
+   
     contact = np.array([[0.0, 0.0, 0.5]])
     base    = np.array([[1.0, 0.0, 0.0]])
     approach= np.array([[0.0, 0.0, 1.0]])

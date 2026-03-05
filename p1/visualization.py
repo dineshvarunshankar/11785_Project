@@ -97,7 +97,7 @@ def visualize_grasps(pc, pred_grasps_cam, scores,
     """
     geometries = []
 
-    # -- Point cloud --
+    # Point cloud
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(pc[:, :3])
     if pc_colors is not None:
@@ -106,7 +106,7 @@ def visualize_grasps(pc, pred_grasps_cam, scores,
         pcd.paint_uniform_color([0.5, 0.5, 0.5])
     geometries.append(pcd)
 
-    # -- Colormaps --
+    # Colormaps
     cm_segments = plt.get_cmap("rainbow")   # one color per segment
     cm_scores   = plt.get_cmap("viridis")   # per-grasp score color
 
@@ -161,7 +161,7 @@ def visualize_grasps(pc, pred_grasps_cam, scores,
         line_set.colors = o3d.utility.Vector3dVector(np.array(all_colors))
         geometries.append(line_set)
 
-    # -- Save headless render --
+    # Save headless render
     if save_path is not None:
         os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
         render = o3d.visualization.rendering.OffscreenRenderer(1280, 720)
@@ -185,13 +185,13 @@ def visualize_grasps(pc, pred_grasps_cam, scores,
                             eye.astype(np.float32),
                             up.astype(np.float32))
         img = render.render_to_image()
-        # Convert Open3D image to numpy and save with PIL (more reliable than o3d.io.write_image)
+        # Convert Open3D image to numpy and save with PIL to avoid Open3D's PNG compression artifacts
         img_np = np.asarray(img)
         from PIL import Image as PILImage
         PILImage.fromarray(img_np).save(save_path)
         print(f"Saved render to {save_path}")
 
-    # -- Interactive window --
+    # Interactive window
     if show:
         o3d.visualization.draw_geometries(
             geometries,

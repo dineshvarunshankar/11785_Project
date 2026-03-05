@@ -33,8 +33,8 @@ def main():
 
     data = np.load(args.npz, allow_pickle=True)
     pc_full         = data["pc_full"]           # Nx3
-    pred_grasps_cam = data["pred_grasps_cam"].item()  # dict: seg_id → Mx4x4
-    scores          = data["scores"].item()            # dict: seg_id → M
+    pred_grasps_cam = data["pred_grasps_cam"].item()  # dict: seg_id to Mx4x4
+    scores          = data["scores"].item()            # dict: seg_id to M
     pc_colors       = data.get("pc_colors", None)
     if pc_colors is not None:
         pc_colors = pc_colors

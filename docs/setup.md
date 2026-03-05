@@ -31,26 +31,12 @@ into full 3D grasp poses, and the visualization that lets you see what the model
 
 ---
 
-## How P2, P3, P4 benefit from P1
-
-- **P2** can use the Docker environment to run preprocessing scripts reproducibly,
-  and use `p1/visualization.py` to visually verify that loaded point clouds look correct.
-
-- **P3** can use `p1/pose_utils.py`'s `contact_to_grasp_pose()` to convert their
-  predicted contact points and directions into 4×4 SE(3) pose matrices — the same
-  format the visualization and evaluation code expects.
-
-- **P4** can use `make inference` to get baseline results from the pre-trained checkpoint,
-  and `make visualize` to see what good inference outputs look like before training
-  their own model.
-
----
-
 ## Prerequisites
 
 You need:
 - **Docker** installed on your machine
 - **NVIDIA GPU** (recommended) — or use the CPU build for testing only
+- **NVIDIA Container Toolkit** (for GPU)
 - **Git**
 
 ---
@@ -123,12 +109,6 @@ Each `.npz` file contains:
 
 ## Step 4 — Visualize results
 
-First, set up the lightweight visualization environment (one-time):
-```bash
-make setup-venv
-```
-
-Then visualize any result:
 ```bash
 make visualize
 ```
@@ -140,9 +120,19 @@ This opens an **interactive Open3D window** showing:
 
 You can rotate, zoom, and pan the scene in the window.
 
+Visualization runs **inside the Docker container** using X11 forwarding — the window
+appears on your screen but renders with all the same dependencies as inference. No
+separate environment needed.
+
+> **Linux only**: X11 forwarding requires a running X server (standard on Ubuntu desktop).
+> The `make visualize` command runs `xhost +local:docker` automatically to grant access.
+
 To visualize a different scene or change the number of grasps shown:
 ```bash
-cgn_visualize_venv/bin/python p1/visualize_predictions.py \
+docker run --rm -it --gpus all \
+  -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix \
+  -v $(PWD):/workspace \
+  cgn_pytorch python p1/visualize_predictions.py \
   --npz results/predictions_3.npz \
   --topk 100
 ```
@@ -152,11 +142,19 @@ cgn_visualize_venv/bin/python p1/visualize_predictions.py \
 ## Step 5 — Verify everything works
 
 ```bash
-make test      # runs pose construction unit tests (pure math, no GPU needed)
+make test      # runs pose construction unit tests 
 make verify    # checks that PointNet++ loads and runs a forward pass
 ```
 
 Both should complete without errors.
+
+> **Note on `pointnet2_ops` (compiled CUDA extensions):**
+> The original TensorFlow CGN required manually compiling C++ CUDA ops (`pointnet2_ops`),
+> which needed matching GCC, CUDA, and ninja versions — a common source of env issues.
+> The PyTorch port we use (`contact_graspnet_pytorch`) **does not require this** — it uses
+> a pure-Python/PyTorch reimplementation of PointNet++ (`Pointnet_Pointnet2_pytorch/models/pointnet2_utils.py`)
+> that runs on GPU without any compilation step.
+> `make verify` confirms this pure-Python PointNet++ works correctly on your GPU.
 
 ---
 
@@ -180,6 +178,37 @@ Both should complete without errors.
 └── docs/
     └── setup.md            ← This file
 ```
+
+---
+
+## Understanding `configs/config.yaml`
+
+The config file controls everything about the model — data loading, architecture,
+training, and inference. It has four sections:
+
+| Section | What it controls |
+|---|---|
+| `DATA` | Point cloud size (`num_point: 2048`), gripper width, contact label bins, data augmentation |
+| `MODEL` | PointNet++ architecture — SA-MSG layer radii, MLP sizes, which output heads are active |
+| `OPTIMIZER` | Training hyperparameters — `batch_size`, `learning_rate`, `max_epoch`, LR decay schedule |
+| `TEST` | Inference filtering — `first_thres` / `second_thres` confidence cutoffs, max samples |
+
+**Values you'll most likely want to change:**
+
+```yaml
+OPTIMIZER:
+  batch_size: 3       # reduce if you run out of GPU memory
+  learning_rate: 0.001
+  max_epoch: 16       # increase for full training runs
+
+TEST:
+  first_thres: 0.23   # lower → more grasps shown; raise → fewer but higher confidence
+  second_thres: 0.19
+```
+
+**Where it's loaded:** `contact_graspnet_pytorch/contact_graspnet_pytorch/config_utils.py`
+reads this file at startup. All other modules receive the config as a dict.
+You do not need to touch this file to run inference with the pre-trained checkpoint.
 
 ---
 
@@ -207,3 +236,73 @@ This is what P3/P4 will use to interface with the rest of the pipeline.
 | `results/` permission error | Run `sudo chown -R $USER:$USER results/` |
 | Old GPU (sm_120 warning) | Use `make build-blackwell` instead of `make build` |
 | Container name already in use | Run `make down` then retry |
+
+---
+
+## How P2, P3, P4 use P1's work
+
+### P2 — Dataset & Preprocessing
+
+P2 builds the data loader. They can validate their point cloud preprocessing is correct by
+visually comparing it against P1's inference outputs:
+
+```python
+from p1.visualization import visualize_grasps
+import numpy as np
+
+# Load P1's inference output as a reference
+ref = np.load("results/predictions_9.npz", allow_pickle=True)
+
+# Load your own preprocessed point cloud
+my_pc = your_loader.load("test_data/9.npy")  # should look the same as ref["pc_full"]
+
+# Visualize your pc against P1's predicted grasps — if the pc is wrong, grasps will float in air
+visualize_grasps(my_pc, ref["pred_grasps_cam"].item(), ref["scores"].item())
+```
+
+P2 also uses the same Docker environment (`make build`) so preprocessing runs in the
+exact same Python/CUDA stack as inference.
+
+---
+
+### P3 — Model Heads & Losses
+
+P3 implements the prediction heads. The network outputs raw 4-DoF vectors per point.
+P3 uses `contact_to_grasp_pose()` to convert their model's outputs into SE(3) matrices
+for visualization and loss computation:
+
+```python
+from p1.pose_utils import contact_to_grasp_pose
+
+# Your model's raw outputs
+contact_pts   = model_output["contact_pts"]    # Nx3
+base_dirs     = model_output["base_dirs"]      # Nx3
+approach_dirs = model_output["approach_dirs"]  # Nx3
+widths        = model_output["widths"]         # N
+
+# Convert to Nx4x4 SE(3) poses — ready for visualization or ADDS loss
+grasp_poses = contact_to_grasp_pose(contact_pts, base_dirs, approach_dirs, widths)
+```
+
+P3 can then compare their model's grasp poses against P1's pre-trained baseline using
+`make visualize` to see if the predictions look physically reasonable.
+
+---
+
+### P4 — Training Loop & Evaluation
+
+P4 trains the model and runs evaluation. Use P1's saved baseline predictions
+as the reference to beat:
+
+```python
+# P1's pre-trained baseline (already in results/)
+baseline = np.load("results/predictions_9.npz", allow_pickle=True)
+baseline_scores = baseline["scores"].item()
+
+# After P4 trains model, run  visualizer on their outputs
+python p1/visualize_predictions.py --npz your_results/predictions_9.npz
+```
+
+P4 also uses `make inference` to regenerate the baseline at any time with the
+pre-trained checkpoint, providing a stable reference point for the comparison table
+in the final report.

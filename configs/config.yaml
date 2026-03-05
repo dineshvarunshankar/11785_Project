@@ -9,7 +9,7 @@ DATA:
   train_and_test: false
   intrinsics: realsense
   labels:
-    offset_bins:
+    offset_bins: 
     - 0
     - 0.00794435329
     - 0.0158887021
