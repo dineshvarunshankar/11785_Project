@@ -1,5 +1,5 @@
 # Reference repos
-contact_graspnet/
+contact_graspnet_pytorch/
 
 # Python
 __pycache__/
@@ -31,6 +31,12 @@ Thumbs.db
 
 # Docker
 *.tar
+
+# data
+data/preprocessed_data/
+
+# results
+results/
 
 #math personal references
 docs/P1_MATH_GUIDE.md
